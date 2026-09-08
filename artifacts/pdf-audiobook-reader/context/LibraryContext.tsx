@@ -308,14 +308,31 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const importBook = async () => {
     setIsImporting(true);
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
+      let result;
+      try {
+        result = await DocumentPicker.getDocumentAsync({
+          type: 'application/pdf',
+          copyToCacheDirectory: true,
+          multiple: false,
+        });
+      } catch (pickerError) {
+        console.error('DocumentPicker.getDocumentAsync failed:', pickerError);
+        throw new Error(
+          `The file picker crashed before a PDF could be selected (${
+            pickerError instanceof Error ? pickerError.message : String(pickerError)
+          }).`,
+        );
+      }
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
-      const parsed = await parsePdf(asset.uri, asset.name);
+      console.log('Picked asset:', JSON.stringify(asset));
+      let parsed;
+      try {
+        parsed = await parsePdf(asset.uri, asset.name);
+      } catch (parseError) {
+        console.error('parsePdf failed:', parseError);
+        throw parseError;
+      }
       const book: Book = {
         ...parsed,
         id: makeId(),
