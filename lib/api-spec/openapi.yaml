@@ -1,0 +1,156 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: voices
+    description: Voice catalog and narration
+  - name: subscriptions
+    description: Subscription entitlement checks
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /voices:
+    get:
+      operationId: listAiVoices
+      tags: [voices]
+      summary: List enhanced AI voices
+      responses:
+        "200":
+          description: Available enhanced voices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceCatalogResponse"
+  /entitlements/{appUserId}:
+    get:
+      operationId: getVoiceEntitlement
+      tags: [subscriptions]
+      summary: Check enhanced voice access
+      parameters:
+        - name: appUserId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Entitlement status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntitlementStatus"
+  /tts:
+    post:
+      operationId: synthesizeAiVoice
+      tags: [voices]
+      summary: Synthesize a premium narration chunk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SynthesizeRequest"
+      responses:
+        "200":
+          description: MP3 audio
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        "403":
+          description: Enhanced voice entitlement required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "400":
+          description: Invalid synthesis request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    Voice:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        language:
+          type: string
+        accent:
+          type: string
+        gender:
+          type: string
+        description:
+          type: string
+      required: [id, name, language, accent, gender, description]
+    VoiceCatalogResponse:
+      type: object
+      properties:
+        voices:
+          type: array
+          items:
+            $ref: "#/components/schemas/Voice"
+      required: [voices]
+    EntitlementStatus:
+      type: object
+      properties:
+        appUserId:
+          type: string
+        isPremium:
+          type: boolean
+        entitlementId:
+          type: string
+      required: [appUserId, isPremium]
+    SynthesizeRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        voiceId:
+          type: string
+        appUserId:
+          type: string
+        preview:
+          type: boolean
+          description: Development-only preview flag. Ignored outside development.
+      required: [text, voiceId, appUserId]
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+

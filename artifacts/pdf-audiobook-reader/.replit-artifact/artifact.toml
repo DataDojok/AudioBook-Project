@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/"
+title = "PDF Audiobook Reader"
+description = "A mobile reading companion that imports selectable-text PDFs, detects chapters, and turns them into a structured, resumable listening experience with device narration."
+version = "1.0.0"
+id = "artifacts/pdf-audiobook-reader"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 19218
+
+[services.development]
+run = "pnpm --filter @workspace/pdf-audiobook-reader run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/pdf-audiobook-reader", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/pdf-audiobook-reader", "run", "serve" ]
+
+[services.env]
+PORT = "19218"
+BASE_PATH = "/"

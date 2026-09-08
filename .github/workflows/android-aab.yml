@@ -1,0 +1,100 @@
+name: Build Android App Bundle
+on:
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: "Google Play version code (must increase for every upload)"
+        required: true
+        default: "1"
+        type: string
+permissions:
+  contents: read
+jobs:
+  build-aab:
+    name: Build signed release bundle
+    runs-on: ubuntu-latest
+    env:
+      APP_DIR: artifacts/pdf-audiobook-reader
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Set the requested Android version code
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const versionCode = Number(process.env.VERSION_CODE);
+          if (!Number.isInteger(versionCode) || versionCode < 1) {
+            throw new Error("version_code must be a positive integer.");
+          }
+          const appJson = JSON.parse(fs.readFileSync("app.json", "utf8"));
+          appJson.expo.android ??= {};
+          appJson.expo.android.versionCode = versionCode;
+          fs.writeFileSync("app.json", JSON.stringify(appJson, null, 2) + "\n");
+          NODE
+          
+      - name: Generate the Android project
+        working-directory: ${{ env.APP_DIR }}
+        run: pnpm exec expo prebuild --platform android --no-install --clean
+
+      - name: Restore the upload keystore
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64" || (echo "Missing ANDROID_KEYSTORE_BASE64 repository secret." >&2 && exit 1)
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.p12
+          test -s android/app/upload-keystore.p12
+          
+      - name: Configure release signing
+        working-directory: ${{ env.APP_DIR }}
+        run: node ../../scripts/prepare-android-signing.mjs
+        
+      - name: Build the signed AAB
+        working-directory: ${{ env.APP_DIR }}/android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/artifacts/pdf-audiobook-reader/android/app/upload-keystore.p12
+          ANDROID_KEYSTORE_TYPE: PKCS12
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_PASSWORD" || (echo "Missing ANDROID_KEYSTORE_PASSWORD repository secret." >&2 && exit 1)
+          test -n "$ANDROID_KEY_ALIAS" || (echo "Missing ANDROID_KEY_ALIAS repository secret." >&2 && exit 1)
+          test -n "$ANDROID_KEY_PASSWORD" || (echo "Missing ANDROID_KEY_PASSWORD repository secret." >&2 && exit 1)
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon
+          
+      - name: Upload the AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-audiobook-reader-aab
+          path: ${{ env.APP_DIR }}/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 14
+
